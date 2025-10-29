@@ -1,0 +1,751 @@
+// File: Final Biting Trial SG6_SHC analyses 
+// Author: Ellen Kearney 
+// Date: 20250113
+// Stata version 18.0
+
+use "SG6_SHC_antibodydata_deidentified.dta" , clear
+********************************************************************************************************************
+*********************************************1. Clean dataset*******************************************************
+********************************************************************************************************************
+
+//derive variables
+*Generate intervention variable with baseline, exposure and post-exposure variables
+gen intervention_2_lvl = 0 if visit==2 | visit==3 | visit==4
+recode intervention_2_lvl .=2 if visit>=13
+recode intervention_2_lvl .=1
+
+lab def int 0 "Baseline" 1 "Exposure" 2 "Post-Exposure"
+lab val intervention_2_lvl int
+
+*dummy indicators for intervention period: intervention as 1, baseline and post-exposure as 0
+gen intervention = 0 if visit==2 | visit==3 | visit==4
+recode intervention .=0 if visit>=13
+recode intervention .=1
+
+*post-intervention as 1, baseline and intervention as 0
+gen postintervention =.
+recode postintervention .=1 if visit>=13
+recode postintervention .=0
+
+
+*log transform antibody data
+foreach n of newlist g min mac dir {
+gen log2_`n'_sg6_od = (log(`n'_sg6_od +0.1)/log(2))
+}
+
+foreach n of newlist aeg alb {
+gen log2_`n'_ae_od = (log(`n'_ae_od +0.1)/log(2))
+}
+
+********************************************************************************************************************
+********************************************* 2. Run models ********************************************************
+********************************************************************************************************************
+//Of note: Our models also adjusted for age and sex - however these variables have been removed in line with ethics
+
+xtset id v
+
+//RUN GEE MODELS for Anopheles
+foreach n of newlist g min mac dir {
+	*OVERALL EFFECT OF BITING
+xtgee  log2_`n'_sg6_od c.day2 i.intervention_2_lvl   , corr(ar1) robust 
+est store log2_`n'_int // 
+
+	*PERIOD-SPECIFIC DECAY
+xtgee  log2_`n'_sg6_od c.day2##i.intervention_2_lvl   , corr(ar1) robust 
+est store log2_`n'_intXtime // 
+
+	*DOSE-SPECIFIC EFFECT OF BITING
+xtgee  log2_`n'_sg6_od c.day2 i.intervention_2_lvl##i.exp_lvl   , corr(ar1) robust 
+est store log2_`n'_intXlvl // 
+testparm i.intervention_2_lvl##i.exp_lvl
+
+	*SPECIES-SPECIFIC EFFECT OF BITING
+xtgee  log2_`n'_sg6_od c.day2 i.intervention_2_lvl##i.exp_spp   , corr(ar1) robust 
+est store log2_`n'_intXspp // 
+testparm i.intervention_2_lvl##i.exp_spp
+
+	*THREE WAY DOSE-SPECIES-SPECIFIC EFFECT OF BITING
+xtgee  log2_`n'_sg6_od c.day2 i.intervention_2_lvl##i.exp_sppXlvl   , corr(ar1) robust 
+est store log2_`n'_intXsppXlvl // 
+testparm i.intervention_2_lvl##i.exp_sppXlvl
+}
+
+// Run GEE models for Aedes
+foreach n of newlist aeg alb {
+		*OVERALL EFFECT OF BITING
+xtgee  log2_`n'_ae_od c.day2 i.intervention_2_lvl   , corr(ar1) robust 
+est store log2_`n'_int // 
+
+	*PERIOD-SPECIFIC DECAY
+xtgee  log2_`n'_ae_od c.day2##i.intervention_2_lvl   , corr(ar1) robust 
+est store log2_`n'_intXtime // 
+
+	*DOSE-SPECIFIC EFFECT OF BITING
+xtgee  log2_`n'_ae_od c.day2 i.intervention_2_lvl##i.exp_lvl   , corr(ar1) robust 
+est store log2_`n'_intXlvl // 
+testparm i.intervention_2_lvl##i.exp_lvl
+
+	*SPECIES-SPECIFIC EFFECT OF BITING
+xtgee  log2_`n'_ae_od c.day2 i.intervention_2_lvl##i.exp_spp   , corr(ar1) robust 
+est store log2_`n'_intXspp // 
+testparm i.intervention_2_lvl##i.exp_spp
+
+	*THREE WAY DOSE-SPECIES-SPECIFIC EFFECT OF BITING
+xtgee  log2_`n'_ae_od c.day2 i.intervention_2_lvl##i.exp_sppXlvl   , corr(ar1) robust 
+est store log2_`n'_intXsppXlvl // 
+testparm i.intervention_2_lvl##i.exp_sppXlvl
+}
+
+
+//run models to estimate odds of seropositivity after biting X interactions
+foreach n of newlist g min mac dir {
+xtgee  `n'_sg6_pos c.day2 i.intervention_2_lvl   , family(binomial) link(logit) corr(ar1) robust ef 
+est store pos_`n'_int // 
+
+xtgee  `n'_sg6_pos c.day2 i.intervention_2_lvl##i.exp_lvl   ,  family(binomial) link(logit) corr(ar1) robust ef
+est store pos_`n'_intXlvl // 
+
+xtgee `n'_sg6_pos c.day2 i.intervention_2_lvl##i.exp_spp   , family(binomial) link(logit) corr(ar1) robust ef
+est store pos_`n'_intXspp // 
+
+xtgee `n'_sg6_pos c.day2 i.intervention_2_lvl##i.exp_sppXlvl   , family(binomial) link(logit) corr(ar1) robust ef
+est store pos_`n'_intXsppXlvl // 
+
+}
+
+
+//run models to estimate odds of seropositivity after biting X interactions
+foreach n of newlist aeg alb {
+xtgee  `n'_ae_pos c.day2 i.intervention_2_lvl  , family(binomial) link(logit) corr(ar1) robust ef 
+est store pos_`n'_int // 
+
+xtgee  `n'_ae_pos c.day2 i.intervention_2_lvl##i.exp_lvl   ,  family(binomial) link(logit) corr(ar1) robust ef
+est store pos_`n'_intXlvl // 
+
+xtgee `n'_ae_pos c.day2 i.intervention_2_lvl##i.exp_spp   , family(binomial) link(logit) corr(ar1) robust ef
+est store pos_`n'_intXspp // 
+
+xtgee `n'_ae_pos c.day2 i.intervention_2_lvl##i.exp_sppXlvl   , family(binomial) link(logit) corr(ar1) robust ef
+est store pos_`n'_intXsppXlvl // 
+
+}
+
+********************************************************************************************************************
+************************************************ 3. Outputs ********************************************************
+********************************************************************************************************************
+
+**********************************
+*** GMR of continuous outcomes ***
+**********************************
+
+**********
+*Exposure*
+**********
+
+foreach n of newlist g min mac dir aeg alb { //salivary antigen
+est restore log2_`n'_int
+
+// per day change in antibodies in baseline period
+nlcom 2^(_b[c.day2])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^_b[c.day2]), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Change in antibodies per day in baseline period"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+
+foreach p of numlist 1 2 { // trial period
+if `p' == 1 { // change in antibodies in exposure period relative to baseline
+
+
+est restore log2_`n'_int
+
+nlcom 2^(_b[`p'.intervention_2_lvl])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[`p'.intervention_2_lvl])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Exposure period boost relative to baseline"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+}
+else {  // change in antibodies in post-exposure period relative to baseline
+
+
+est restore log2_`n'_int
+
+nlcom 2^(_b[`p'.intervention_2_lvl] )
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[`p'.intervention_2_lvl] )), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Post-exposure period boost relative to baseline"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+}
+}
+}
+
+************************
+*Exposure X Time
+************************
+
+foreach n of newlist g min mac dir aeg alb { //salivary antigen
+est restore log2_`n'_intXtime
+
+// per day change in antibodies in baseline period
+nlcom 2^(_b[c.day2])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^_b[c.day2]), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Change in antibodies per day in baseline period"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+foreach p of numlist 1 2 { // trial period
+if `p' == 1 { // per day change in antibodies in exposure period 
+
+
+est restore log2_`n'_intXtime
+
+nlcom 2^(_b[c.day2] + _b[`p'.intervention_2_lvl#c.day2])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[c.day2] + _b[`p'.intervention_2_lvl#c.day2])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Per day changes in antibodies for the exposure period"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+}
+else {  // per day change in antibodies in post-exposure period 
+
+est restore log2_`n'_intXtime
+
+nlcom 2^(_b[c.day2] + _b[`p'.intervention_2_lvl#c.day2])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[c.day2] + _b[`p'.intervention_2_lvl#c.day2])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Per day changes in antibodies for the exposure period"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+}
+}
+}
+
+
+// estimate antibody half lives in post-exposure periods
+foreach n of newlist g min mac dir aeg alb {
+
+est restore log2_`n'_intXtime
+
+eststo `n'_int_post: nlcom -1/(_b[c.day2] + _b[2.intervention_2_lvl#c.day2]) , post
+
+
+matrix b = e(b)
+
+  matrix x = e(V)
+
+ matrix b = e(b)
+
+  matrix x = e(V)
+
+  local se = sqrt(x[1,1])
+
+  local b = b[1,1]
+
+*** 95% CIs
+
+local ab_hl_ll= `b' -invnormal(0.975)* `se'
+local ab_hl_ul=  `b' +invnormal(0.975)* `se'
+
+
+
+di "post-exposure `n' antibody half life:" `b'
+di "post-exposure `n' antibody half life LL:" `ab_hl_ll'
+di "post-exposure `n' antibody half life UL:" `ab_hl_ul'
+
+
+}
+
+
+*******************************************************************
+*Exposure X Species (spp) X Biting Dose (lvl) X Condition (sppXlvl)
+*******************************************************************
+
+
+foreach n of newlist g min mac dir aeg alb { // for each salivary antigen
+foreach m of newlist lvl spp sppXlvl { // for each model
+est restore log2_`n'_intX`m'
+
+// per day change in antibodies in baseline period
+nlcom 2^(_b[c.day2])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^_b[c.day2]), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Change in antibodies per day in baseline period"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+if "`m'" == "lvl" { // INTERVENTION X BITING DOSE
+foreach l of numlist  1 2 { // exposure dose (low 35 vs high 305)
+
+est restore log2_`n'_intX`m'
+
+nlcom 2^(_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`l'.exp_`m'])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`l'.exp_`m'])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Exposure period boost relative to baseline for `m'  `l'"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+
+est restore log2_`n'_intX`m'
+
+nlcom 2^(_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`l'.exp_`m'])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`l'.exp_`m'])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Post-exposure period boost relative to baseline for `m'  `l'"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+}
+}
+else if "`m'" == "spp" { // INTERVENTION VS BITING SPECIES
+foreach s of numlist  1/5 { // exposure species (1 AEG; 2 ALB; 3 DIR; 4 MAC; 5 MIN)
+
+est restore log2_`n'_intX`m'
+
+nlcom 2^(_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`s'.exp_`m'])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`s'.exp_`m'])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Exposure period boost relative to baseline for `m'  `s'"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+est restore log2_`n'_intX`m'
+
+nlcom 2^(_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`s'.exp_`m'])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`s'.exp_`m'])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Post-exposure period boost relative to baseline for `m'  `s'"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+}
+}
+else {  // INTERVENTION x CONDITION
+
+foreach c of numlist  1/10 { // condition (1 AEG_35; 2 AEG_305; 3 ALB_35; 4 ALB_305; 5 DIR_35; 6 DIR_305; 7 MAC_35; 8 MAC_305; 9 MIN_35; 10 MIN_305)
+
+est restore log2_`n'_intX`m'
+
+
+nlcom 2^(_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`c'.exp_`m'])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`c'.exp_`m'])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Exposure period boost relative to baseline for `m'  `c'"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+est restore log2_`n'_intX`m'
+
+nlcom 2^(_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`c'.exp_`m'])
+matrix coef_tab = r(table)
+local coef = coef_tab[1, 1]
+
+nlcom log(2^(_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`c'.exp_`m'])), post
+matrix ptab = r(table)
+ matrix b = e(b)
+  matrix x = e(V)
+  local se = sqrt(x[1,1])
+  local b = b[1,1]
+local pval = ptab[4, 1]
+
+
+*** 95% CIs
+local ab_ll= exp(`b' -invnormal(0.975)* `se')
+local ab_ul=  exp(`b' +invnormal(0.975)* `se')
+
+di "Post-exposure period boost relative to baseline for `m'  `c'"
+di "b " `coef'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+}
+}
+}
+}
+
+
+***********************************
+*** OR of seropositive outcomes ***
+***********************************
+foreach n of newlist g min mac dir aeg alb { // for each salivary antigen
+est restore pos_`n'_int
+
+//per day change in antibodies during baseline
+nlcom (_b[c.day2]), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Change in odds of antibody seropos per day in baseline period"
+di "b " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+
+// exposure
+nlcom _b[1.intervention_2_lvl], ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Exposure period boost relative to baseline"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+est restore pos_`n'_intXlvl
+
+// post-exposure
+nlcom _b[2.intervention_2_lvl], ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Post-exposurexposure period boost relative to baseline"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+}
+
+*******************************************************************
+*Exposure X Species (spp) X Biting Dose (lvl) X Condition (sppXlvl)
+*******************************************************************
+
+
+foreach n of newlist g min mac dir aeg alb { // for each salivary antigen
+foreach m of newlist lvl spp sppXlvl { // for each model
+est restore pos_`n'_intX`m'
+
+// per day change in antibodies in baseline period
+
+nlcom (_b[c.day2]), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "per day change in antibodies in baseline period"
+di "b " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+
+if "`m'" == "lvl" { // INTERVENTION X BITING DOSE
+foreach l of numlist  1 2 { // exposure dose (low 35 vs high 305)
+
+est restore pos_`n'_intX`m'
+
+nlcom (_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`l'.exp_`m']), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Exposure period boost relative to baseline for `m'  `l'"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+nlcom (_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`l'.exp_`m']), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Post-exposure period boost relative to baseline for `m'  `l'"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+}
+}
+else if "`m'" == "spp" { // INTERVENTION VS BITING SPECIES
+foreach s of numlist  1/5 { // exposure species (1 AEG; 2 ALB; 3 DIR; 4 MAC; 5 MIN)
+
+est restore pos_`n'_intX`m'
+
+nlcom (_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`s'.exp_`m']), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Exposure period boost relative to baseline for `m'  `s'"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+nlcom (_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`s'.exp_`m']), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Post-exposure period boost relative to baseline for `m'  `s'"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+}
+}
+else {  // INTERVENTION x CONDITION
+
+foreach c of numlist  1/10 { // condition (1 AEG_35; 2 AEG_305; 3 ALB_35; 4 ALB_305; 5 DIR_35; 6 DIR_305; 7 MAC_35; 8 MAC_305; 9 MIN_35; 10 MIN_305)
+
+est restore pos_`n'_intX`m'
+
+nlcom (_b[1.intervention_2_lvl] + _b[1.intervention_2_lvl#`c'.exp_`m']), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Exposure period boost relative to baseline for `m'  `c'"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+
+nlcom (_b[2.intervention_2_lvl] + _b[2.intervention_2_lvl#`c'.exp_`m']), ef
+matrix or_tab = r(table)
+local or = or_tab[1, 1]
+local pval = or_tab[4, 1]
+
+*** 95% CIs
+local ab_ll= or_tab[5, 1]
+local ab_ul= or_tab[6, 1]
+
+di "Post-exposure period boost relative to baseline for `m'  `c'"
+di "or " `or'
+di "ll " `ab_ll'
+di "ul " `ab_ul'
+di "p" `pval'
+}
+}
+}
+}
